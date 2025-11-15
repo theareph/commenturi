@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type Comment struct {
@@ -34,25 +35,30 @@ type CommentRequest struct {
 }
 
 type PaginatedResponse struct {
-	Comments   []Comment `json:"comments"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"page_size"`
+	Comments []Comment `json:"comments"`
+	Page     int       `json:"page"`
+	PageSize int       `json:"page_size"`
 }
 
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+type GlobalContext struct {
+	db  *gorm.DB
+	ctx *context.Context
+}
 
-var GlobalCtx map[string]any = make(map[string]any)
+var GlobalCtx = GlobalContext{}
+
 func main() {
 	db, err := gorm.Open(sqlite.Open("main.db"), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
 	}
 	ctx := context.Background()
-	GlobalCtx["ctx"] = &ctx
-	GlobalCtx["db"] = db
+	GlobalCtx.ctx = &ctx
+	GlobalCtx.db = db
 
 	// Migrate the schema
 	db.AutoMigrate(&Comment{})
@@ -110,8 +116,8 @@ func GetURI(uri string, uriEncoded string, getEncoded bool) string {
 }
 
 func handleGetComments(w http.ResponseWriter, r *http.Request) {
-	db := GlobalCtx["db"].(*gorm.DB)
-	ctx := GlobalCtx["ctx"].(*context.Context)
+	db := GlobalCtx.db
+	ctx := GlobalCtx.ctx
 
 	uriEncoded := GetURI(r.URL.Query().Get("uri"), r.URL.Query().Get("uri_encoded"), true)
 
@@ -125,18 +131,16 @@ func handleGetComments(w http.ResponseWriter, r *http.Request) {
 		pageSize = 10
 	}
 
-	paginatedComments, err := gorm.G[Comment](db).Where("uri_encoded = ?", uriEncoded).Limit(pageSize).Offset((page-1) * pageSize).Order("inserted_at DESC").Find(*ctx)
+	paginatedComments, err := gorm.G[Comment](db).Where("uri_encoded = ?", uriEncoded).Limit(pageSize).Offset((page - 1) * pageSize).Order("inserted_at DESC").Find(*ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-
-
 	response := PaginatedResponse{
-		Comments:   paginatedComments,
-		Page:       page,
-		PageSize:   pageSize,
+		Comments: paginatedComments,
+		Page:     page,
+		PageSize: pageSize,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -144,8 +148,8 @@ func handleGetComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePostComment(w http.ResponseWriter, r *http.Request) {
-	db := GlobalCtx["db"].(*gorm.DB)
-	ctx := GlobalCtx["ctx"].(*context.Context)
+	db := GlobalCtx.db
+	ctx := GlobalCtx.ctx
 
 	var req CommentRequest
 
@@ -155,7 +159,7 @@ func handlePostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.URI = r.URL.Query().Get("uri")
-	req.URIEncoded =  r.URL.Query().Get("uri_encoded")
+	req.URIEncoded = r.URL.Query().Get("uri_encoded")
 	if req.URI == "" && req.URIEncoded == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "uri or uri_encoded is required"})
@@ -181,13 +185,13 @@ func handlePostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comment := Comment {
-		URI: GetURI(req.URI, req.URIEncoded, false),
+	comment := Comment{
+		URI:        GetURI(req.URI, req.URIEncoded, false),
 		URIEncoded: GetURI(req.URI, req.URIEncoded, true),
-		Nickname: req.Nickname,
-		Email: req.Email,
-		Title: req.Title,
-		Content: req.Content,
+		Nickname:   req.Nickname,
+		Email:      req.Email,
+		Title:      req.Title,
+		Content:    req.Content,
 		InsertedAt: time.Now(),
 	}
 	err := gorm.G[Comment](db).Create(*ctx, &comment)
@@ -197,7 +201,6 @@ func handlePostComment(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "Failed to create comment"})
 		return
 	}
-
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(comment)
