@@ -51,7 +51,7 @@ func main() {
 		panic("failed to connect database")
 	}
 	ctx := context.Background()
-	GlobalCtx["ctx"] = ctx
+	GlobalCtx["ctx"] = &ctx
 	GlobalCtx["db"] = db
 
 	// Migrate the schema
@@ -111,7 +111,7 @@ func GetURI(uri string, uriEncoded string, getEncoded bool) string {
 
 func handleGetComments(w http.ResponseWriter, r *http.Request) {
 	db := GlobalCtx["db"].(*gorm.DB)
-	ctx := GlobalCtx["ctx"].(context.Context)
+	ctx := GlobalCtx["ctx"].(*context.Context)
 
 	uriEncoded := GetURI(r.URL.Query().Get("uri"), r.URL.Query().Get("uri_encoded"), true)
 
@@ -125,7 +125,7 @@ func handleGetComments(w http.ResponseWriter, r *http.Request) {
 		pageSize = 10
 	}
 
-	paginatedComments, err := gorm.G[Comment](db).Where("uri_encoded = ?", uriEncoded).Limit(pageSize).Offset((page-1) * pageSize).Order("inserted_at DESC").Find(ctx)
+	paginatedComments, err := gorm.G[Comment](db).Where("uri_encoded = ?", uriEncoded).Limit(pageSize).Offset((page-1) * pageSize).Order("inserted_at DESC").Find(*ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -145,7 +145,7 @@ func handleGetComments(w http.ResponseWriter, r *http.Request) {
 
 func handlePostComment(w http.ResponseWriter, r *http.Request) {
 	db := GlobalCtx["db"].(*gorm.DB)
-	ctx := GlobalCtx["ctx"].(context.Context)
+	ctx := GlobalCtx["ctx"].(*context.Context)
 
 	var req CommentRequest
 
@@ -190,7 +190,7 @@ func handlePostComment(w http.ResponseWriter, r *http.Request) {
 		Content: req.Content,
 		InsertedAt: time.Now(),
 	}
-	err := gorm.G[Comment](db).Create(ctx, &comment)
+	err := gorm.G[Comment](db).Create(*ctx, &comment)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
